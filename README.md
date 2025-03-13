@@ -1,37 +1,54 @@
 # Cursor Chat Monitor
 
-A Python script that monitors and extracts chat data from Cursor's state database in real-time.
+## Cursor Chat Monitor Script Explanation
 
-## Description
+The `cursor_chat_monitor.py` script is designed to monitor Cursor's state database and extract chat data in real-time. Here's how it works:
 
-This script connects to Cursor's SQLite database (`state.vscdb`) and continuously monitors it for new chat entries. When new chats are detected, they are formatted and printed to the terminal.
+1. **Database Connection**: The script connects to Cursor's SQLite database located at `C:\Users\philip\AppData\Roaming\Cursor\User\globalStorage\state.vscdb`.
 
-## Requirements
+2. **Continuous Monitoring**: It runs in an infinite loop, checking for new chat entries every 5 seconds.
 
-- Python 3.6+
-- SQLite3 (included in Python standard library)
+3. **Chat Tracking**: The script keeps track of the last processed chat ID and updates to existing chats to avoid showing the same messages multiple times.
 
-## Usage
+4. **Formatted Output**: When new chats or updates are detected, they are formatted nicely and printed to the terminal, showing:
+   - Chat ID
+   - Timestamp
+   - Chat title
+   - Messages with their roles (USER/ASSISTANT)
 
-1. Make sure Cursor is installed on your system
-2. Run the script:
+5. **Error Handling**: The script includes robust error handling for database connection issues, file not found errors, and JSON parsing problems.
+
+6. **Text-to-Speech**: The script uses Google Text-to-Speech (gTTS) and Pygame to read out new chat messages.
+
+### How to run the script:
+
+1. **Open a terminal or command prompt**
+2. **Navigate to the directory containing the script**
+   ```bash
+   cd C:\Users\philip\Documents\cursor-narrator
+   ```
+
+3. **Run the script with options**:
+   - To monitor for new chats and save output to a file:
+     ```bash
+     python cursor_chat_monitor.py --output cursor_chats.txt
+     ```
+   
+4. **Enable Debug Mode**:
+   ```bash
+   python cursor_chat_monitor.py --debug
+   ```
+
+5. **Print All Existing Chats**:
+   ```bash
+   python cursor_chat_monitor.py --print-all
+   ```
+
+6. **Stop Monitoring**:
+   - Press `Ctrl+C` to stop the script when you're done.
+
+The script requires the `gTTS` and `pygame` packages for text-to-speech functionality. You can install them using:
 
 ```bash
-python cursor_chat_monitor.py
+pip install gTTS pygame
 ```
-
-3. The script will continuously monitor for new chats and print them to the terminal
-4. Press `Ctrl+C` to stop the monitoring
-
-## Features
-
-- Real-time monitoring of new chat entries
-- Formatted display of chat messages with timestamps
-- Tracks the last processed chat ID to avoid duplicates
-- Handles database connection errors gracefully
-
-## Notes
-
-- The script is configured to look for the database at: `C:\Users\philip\AppData\Roaming\Cursor\User\globalStorage\state.vscdb`
-- If your Cursor database is located elsewhere, modify the `DB_PATH` variable in the script
-- The script creates a `last_processed_id.txt` file to keep track of which chats have already been processed 
