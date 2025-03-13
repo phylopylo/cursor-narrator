@@ -1,0 +1,2 @@
+# No external dependencies required - using only Python standard library
+# sqlite3, json, time, os, and datetime are all part of the standard library 
