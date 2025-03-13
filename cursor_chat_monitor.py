@@ -252,6 +252,41 @@ def format_chat_message(chat_data):
     except Exception as e:
         return f"Error formatting chat: {str(e)}"
 
+def format_new_messages(composer_data, previous_count, debug=False):
+    """Format only the new messages in an updated chat."""
+    try:
+        data = json.loads(composer_data)
+        
+        if debug:
+            print(f"DEBUG: Formatting new messages starting from index {previous_count}")
+        
+        composer_id = data.get('composerId', 'Unknown')
+        conversation = data.get('conversation', [])
+        
+        # Get only the new messages
+        new_messages = conversation[previous_count:]
+        
+        if not new_messages:
+            return "No new messages found."
+        
+        output = f"\n{'-'*80}\n"
+        output += f"NEW MESSAGES IN CHAT: {composer_id}\n"
+        output += f"{'-'*80}\n\n"
+        
+        for msg in new_messages:
+            msg_type = msg.get('type', 0)
+            role = "USER" if msg_type == 1 else "ASSISTANT" if msg_type == 2 else "SYSTEM"
+            text = msg.get('text', '')
+            
+            if text:
+                output += f"[{role}]:\n{text}\n\n"
+        
+        return output
+    except json.JSONDecodeError:
+        return f"Error parsing composer data: {composer_data[:100]}..."
+    except Exception as e:
+        return f"Error formatting new messages: {str(e)}"
+
 def monitor_chats(db_path, output_file=None, debug=False):
     """Monitor the database for new chats and print them to the terminal."""
     if not db_path or not os.path.exists(db_path):
@@ -274,20 +309,25 @@ def monitor_chats(db_path, output_file=None, debug=False):
             file_handle.write(text + "\n")
     
     write_output(f"Monitoring Cursor chat database at: {db_path}")
-    write_output("Waiting for new chats...\n")
-    write_output("Press Ctrl+C to stop monitoring.")
+    write_output("Waiting for new chats and updates to existing chats...")
+    write_output("Checking every 5 seconds. Press Ctrl+C to stop monitoring.\n")
     
-    # Keep track of seen composer IDs
-    seen_composers = set()
+    # Keep track of seen composer IDs and their conversation lengths
+    seen_composers = {}
     
-    # Get initial list of composers
+    # Get initial list of composers and their conversation lengths
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT key FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
+        cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
         results = cursor.fetchall()
-        for row in results:
-            seen_composers.add(row[0])
+        for key, value in results:
+            try:
+                json_data = json.loads(value)
+                conversation = json_data.get('conversation', [])
+                seen_composers[key] = len(conversation)
+            except Exception:
+                seen_composers[key] = 0
         conn.close()
         
         if debug:
@@ -306,24 +346,39 @@ def monitor_chats(db_path, output_file=None, debug=False):
                 cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
                 results = cursor.fetchall()
                 
-                if debug and len(results) > len(seen_composers):
-                    write_output(f"DEBUG: Found {len(results)} composers, {len(seen_composers)} already seen")
+                # Get current timestamp
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
-                # Check for new composers
+                # Check for new composers and updates to existing ones
                 for key, value in results:
-                    if key not in seen_composers:
-                        seen_composers.add(key)
-                        try:
-                            json_data = json.loads(value)
-                            if 'conversation' in json_data and json_data['conversation']:
+                    try:
+                        json_data = json.loads(value)
+                        conversation = json_data.get('conversation', [])
+                        current_length = len(conversation)
+                        
+                        if key not in seen_composers:
+                            # New chat detected
+                            if current_length > 0:
                                 formatted_data = format_composer_data(value, debug)
-                                write_output(f"\nNEW CHAT DETECTED: {key}")
+                                write_output(f"\n[{current_time}] NEW CHAT DETECTED: {key}")
                                 write_output(formatted_data)
-                            else:
-                                if debug:
-                                    write_output(f"DEBUG: New composer {key} has empty conversation")
-                        except Exception as e:
-                            write_output(f"Error processing new composer {key}: {str(e)}")
+                            elif debug:
+                                write_output(f"DEBUG: New composer {key} has empty conversation")
+                            seen_composers[key] = current_length
+                        elif current_length > seen_composers[key]:
+                            # Existing chat updated with new messages
+                            previous_count = seen_composers[key]
+                            write_output(f"\n[{current_time}] CHAT UPDATED: {key}")
+                            write_output(f"Previous message count: {previous_count}, New message count: {current_length}")
+                            
+                            # Format only the new messages
+                            formatted_data = format_new_messages(value, previous_count, debug)
+                            write_output(formatted_data)
+                            
+                            seen_composers[key] = current_length
+                    except Exception as e:
+                        if debug:
+                            write_output(f"Error processing composer {key}: {str(e)}")
                 
                 conn.close()
                 
@@ -333,9 +388,9 @@ def monitor_chats(db_path, output_file=None, debug=False):
                 write_output(f"Error: {e}")
                 
             # Wait before checking again
-            time.sleep(2)
+            time.sleep(5)
     except KeyboardInterrupt:
-        write_output("\nMonitoring stopped by user.")
+        write_output(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Monitoring stopped by user.")
     finally:
         if file_handle:
             file_handle.close()
@@ -347,6 +402,7 @@ def parse_arguments():
     parser.add_argument('--output', '-o', type=str, help='Save output to file')
     parser.add_argument('--debug', '-d', action='store_true', help='Enable debug output')
     parser.add_argument('--no-monitor', action='store_true', help='Do not monitor for new chats')
+    parser.add_argument('--print-all', action='store_true', help='Print all existing chats before monitoring')
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -360,9 +416,12 @@ if __name__ == "__main__":
             print("\n=== DATABASE INFORMATION ===")
             print_database_info(db_path)
         
-        print("\n=== CHAT DATA ===")
-        print_all_chats(db_path, args.output, args.debug)
+        # Print all existing chats if requested or if no-monitor is set
+        if args.print_all or args.no_monitor:
+            print("\n=== EXISTING CHAT DATA ===")
+            print_all_chats(db_path, args.output, args.debug)
         
+        # Monitor for new chats by default unless no-monitor is set
         if not args.no_monitor:
             print("\n=== MONITORING FOR NEW CHATS ===")
             monitor_chats(db_path, args.output, args.debug)
