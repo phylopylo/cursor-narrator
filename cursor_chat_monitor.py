@@ -6,6 +6,16 @@ import glob
 import time
 import argparse
 import sys
+from gtts import gTTS
+from io import BytesIO
+import pygame
+
+def speak(text):
+    mp3_file_object = BytesIO()
+    tts = gTTS(text, lang='en')
+    tts.save("hello.mp3")
+    os.system("mpg123 hello.mp3")  # On Windows
+    os.system("del hello.mp3")  # On Windows
 
 def find_cursor_db():
     """Search for the Cursor database file in common locations."""
@@ -267,7 +277,14 @@ def format_new_messages(composer_data, previous_count, debug=False):
         new_messages = conversation[previous_count:]
         
         if not new_messages:
-            return "No new messages found."
+            return ""
+        else:
+            for msg in new_messages:
+                text = str(msg.get('text', ''))
+                if text != '':
+                    print(text)
+                    speak(text)
+            return
         
         output = f"\n{'-'*80}\n"
         output += f"NEW MESSAGES IN CHAT: {composer_id}\n"
@@ -310,7 +327,7 @@ def monitor_chats(db_path, output_file=None, debug=False):
     
     write_output(f"Monitoring Cursor chat database at: {db_path}")
     write_output("Waiting for new chats and updates to existing chats...")
-    write_output("Checking every 5 seconds. Press Ctrl+C to stop monitoring.\n")
+    write_output("Checking every 1 seconds. Press Ctrl+C to stop monitoring.\n")
     
     # Keep track of seen composer IDs and their conversation lengths
     seen_composers = {}
@@ -388,7 +405,7 @@ def monitor_chats(db_path, output_file=None, debug=False):
                 write_output(f"Error: {e}")
                 
             # Wait before checking again
-            time.sleep(5)
+            time.sleep(1)
     except KeyboardInterrupt:
         write_output(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Monitoring stopped by user.")
     finally:
