@@ -27,27 +27,46 @@ speak = lambda text: engine.say(text) or engine.runAndWait()
 # Set to store keys of processed messages
 processed_keys = set()
 
-# Infinite loop to check for new messages
+# Initialize start_timestamp to None
+start_timestamp = None
+
+# Flag to check if it's the first loop
+first_loop = True
+
 while True:
-    # Query to select all entries from the 'cursorDiskKV' table
-    cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
+
+    # cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
+    cursor.execute("SELECT key, value FROM cursorDiskKV")
+    print('processing start')
 
     # Fetch and read all messages
     for key, value in cursor.fetchall():
         if key not in processed_keys:
+            print(key)
             try:
                 data = json.loads(value)
                 messages = data.get('conversation', [])
                 for message in messages:
-                    text = message.get('text', '')
-                    print(f"[{['SYSTEM', 'USER', 'ASSISTANT'][message.get('type', 0)]}]: {text}")
-                    speak(text)
+                    message_timestamp = message.get('timestamp', 0)
+                    # On the first loop, set start_timestamp to the most recent message's timestamp
+                    if first_loop:
+                        start_timestamp = max(start_timestamp or 0, message_timestamp)
+                    print(message_timestamp)
+                    print(start_timestamp)
+                    if message_timestamp > start_timestamp:
+                        text = message.get('text', '')
+                        print(f"[{['SYSTEM', 'USER', 'ASSISTANT'][message.get('type', 0)]}]: {text}")
+                        speak(text)
                 processed_keys.add(key)
             except json.JSONDecodeError:
                 print(f"Error decoding JSON for key: {key}")
-    
+
+    # End of first loop
+    first_loop = False
+
     # Wait for 5 seconds before checking again
-    time.sleep(5)
+    print('processing end')
+    time.sleep(1)
 
 # Close the connection
 conn.close() 
